@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Chess, Square } from "chess.js";
 import { Chessboard } from "react-chessboard";
 import useStockfish from "../hooks/useStockfish";
+import useConfigStore from "../store/config";
 
 function extractMove(str: string) {
   const match = str.split(" ")[1];
@@ -9,6 +10,9 @@ function extractMove(str: string) {
 }
 
 export default function ChessBoard() {
+  const playWithComputer = useConfigStore().playWithComputer;
+  const computerDifficulty = useConfigStore().computerDifficulty;
+  const setBestMovie = useConfigStore().setBestMovie;
   const [game, setGame] = useState(new Chess());
 
   const { startPosition, evaluate } = useStockfish({
@@ -17,12 +21,17 @@ export default function ChessBoard() {
 
       if (data.includes("bestmove")) {
         const move = extractMove(data);
+        setBestMovie(move);
 
-        makeAMove({
-          from: move.slice(0, 2) as Square,
-          to: move.slice(2, 4) as Square,
-          promotion: "q",
-        });
+        if (playWithComputer && computerDifficulty !== "dumb") {
+          makeAMove({
+            from: move.slice(0, 2) as Square,
+            to: move.slice(2, 4) as Square,
+            promotion: "q",
+          });
+        } else if (playWithComputer && computerDifficulty === "dumb") {
+          makeAMove();
+        }
       }
     },
   });
@@ -31,8 +40,19 @@ export default function ChessBoard() {
     startPosition();
   }, [startPosition]);
 
-  function makeAMove(move: string | { from: Square; to: Square; promotion: string }) {
+  function makeAMove(move?: string | { from: Square; to: Square; promotion: string }) {
     const gameCopy = new Chess(game.fen());
+    if (!move) {
+      const possibilities = gameCopy.moves();
+      const index = Math.floor(Math.random() * possibilities.length);
+      move = possibilities[index];
+      const result = gameCopy.move(move);
+
+      if (result === null) return;
+      setGame(gameCopy);
+
+      return result;
+    }
     const result = gameCopy.move(move);
 
     if (result === null) return;
@@ -51,7 +71,11 @@ export default function ChessBoard() {
       return result;
     }
 
-    evaluate({ fen: gameCopy.fen(), depth: 3 });
+    evaluate({
+      fen: gameCopy.fen(),
+      depth: computerDifficulty === "regular" ? 2 : computerDifficulty === "GOD" ? 15 : 1,
+    });
+
     return result;
   }
 
@@ -71,10 +95,6 @@ export default function ChessBoard() {
     <Chessboard
       position={game.fen()}
       onPieceDrop={onDrop}
-      customBoardStyle={{
-        borderRadius: "4px",
-        boxShadow: "0 2px 10px rgba(0, 0, 0, 0.5)",
-      }}
       customDarkSquareStyle={{
         backgroundColor: "#779952",
       }}
